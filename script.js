@@ -1,116 +1,114 @@
 /**
- * Standalone Photogate Timer - The Thinking Experiment
- * Pure client-side JavaScript for sub-millisecond photogate timing.
+ * Hardware Photogate Reader - The Thinking Experiment
+ * Reads real-time optical beam times from physical photogates connected to the computer.
+ * Supports:
+ *  - Vernier Go Direct Photogates (GDX-VPG) via Web Bluetooth & USB (WebHID)
+ *  - USB Serial Photogates (Arduino / micro:bit / DIY) via Web Serial API
+ *  - Sub-millisecond hardware microsecond timestamp decoding
  */
 
 (function () {
     "use strict";
 
     // --- DOM Elements ---
+    const btnConnectBle = document.getElementById("btnConnectBle");
+    const btnConnectUsb = document.getElementById("btnConnectUsb");
+    const btnConnectSerial = document.getElementById("btnConnectSerial");
+    const btnDisconnect = document.getElementById("btnDisconnect");
+    const connStatusPill = document.getElementById("connStatusPill");
+    const connDot = document.getElementById("connDot");
+    const connStatusText = document.getElementById("connStatusText");
+    const compatBanner = document.getElementById("compatBanner");
+
     const btnAudioToggle = document.getElementById("btnAudioToggle");
     const audioIcon = document.getElementById("audioIcon");
     const audioLabel = document.getElementById("audioLabel");
 
-    const btnMode2Gates = document.getElementById("btnMode2Gates");
-    const btnMode1Gate = document.getElementById("btnMode1Gate");
-    const gateUnit2 = document.getElementById("gateUnit2");
-    const gateTransitSpacer = document.getElementById("gateTransitSpacer");
-    const cellG2Time = document.getElementById("cellG2Time");
-    const cellTransitTime = document.getElementById("cellTransitTime");
-    const cellAccel = document.getElementById("cellAccel");
-    const boxGateDistance = document.getElementById("boxGateDistance");
+    // Beam Status Elements
+    const boxBeam1 = document.getElementById("boxBeam1");
+    const badgeBeam1 = document.getElementById("badgeBeam1");
+    const lineBeam1 = document.getElementById("lineBeam1");
+    const lblBeam1Duration = document.getElementById("lblBeam1Duration");
 
-    // Gate 1 DOM
-    const pillStateG1 = document.getElementById("pillStateG1");
-    const beamG1 = document.getElementById("beamG1");
-    const cardG1 = document.getElementById("cardG1");
-    const ledG1 = document.getElementById("ledG1");
-    const btnPassG1 = document.getElementById("btnPassG1");
-    const btnHoldG1 = document.getElementById("btnHoldG1");
+    const boxBeam2 = document.getElementById("boxBeam2");
+    const badgeBeam2 = document.getElementById("badgeBeam2");
+    const lineBeam2 = document.getElementById("lineBeam2");
+    const lblBeam2Duration = document.getElementById("lblBeam2Duration");
 
-    // Gate 2 DOM
-    const pillStateG2 = document.getElementById("pillStateG2");
-    const beamG2 = document.getElementById("beamG2");
-    const cardG2 = document.getElementById("cardG2");
-    const ledG2 = document.getElementById("ledG2");
-    const btnPassG2 = document.getElementById("btnPassG2");
-    const btnHoldG2 = document.getElementById("btnHoldG2");
+    // Test Actions
+    const btnTestBeam1 = document.getElementById("btnTestBeam1");
+    const btnTestBeam2 = document.getElementById("btnTestBeam2");
+    const btnTestPass = document.getElementById("btnTestPass");
 
-    // Transit & Simulation controls
-    const btnSimulatePass = document.getElementById("btnSimulatePass");
-    const rangePassSpeed = document.getElementById("rangePassSpeed");
-    const valPassSpeed = document.getElementById("valPassSpeed");
+    // Digital Hero Readout
+    const btnZeroReadout = document.getElementById("btnZeroReadout");
+    const lblClockSource = document.getElementById("lblClockSource");
+    const heroTransitTime = document.getElementById("heroTransitTime");
+    const heroTransitMs = document.getElementById("heroTransitMs");
+    const inputBeamSpacing = document.getElementById("inputBeamSpacing");
+    const valSpeed = document.getElementById("valSpeed");
+    const valBeam1Time = document.getElementById("valBeam1Time");
+    const valBeam1Speed = document.getElementById("valBeam1Speed");
+    const valBeam2Time = document.getElementById("valBeam2Time");
+    const valBeam2Speed = document.getElementById("valBeam2Speed");
 
-    // Parameters
-    const inputFlagWidth = document.getElementById("inputFlagWidth");
-    const inputGateDist = document.getElementById("inputGateDist");
-    const btnZeroTimer = document.getElementById("btnZeroTimer");
-    const btnRecordRow = document.getElementById("btnRecordRow");
+    // Table Elements
+    const tableBody = document.getElementById("tableBody");
+    const emptyNotice = document.getElementById("emptyNotice");
+    const btnCopyData = document.getElementById("btnCopyData");
+    const btnExportCSV = document.getElementById("btnExportCSV");
+    const btnClearData = document.getElementById("btnClearData");
 
-    // Display LCDs
-    const timerStatusSummary = document.getElementById("timerStatusSummary");
-    const dotG1 = document.getElementById("dotG1");
-    const dotG2 = document.getElementById("dotG2");
-    const dispG1Time = document.getElementById("dispG1Time");
-    const dispG1Vel = document.getElementById("dispG1Vel");
-    const dispG2Time = document.getElementById("dispG2Time");
-    const dispG2Vel = document.getElementById("dispG2Vel");
-    const dispTransitTime = document.getElementById("dispTransitTime");
-    const dispAvgSpeed = document.getElementById("dispAvgSpeed");
-    const dispAccel = document.getElementById("dispAccel");
-    const dispAccelDx = document.getElementById("dispAccelDx");
-
-    // Table elements
-    const timesTableBody = document.getElementById("timesTableBody");
-    const emptyTableMsg = document.getElementById("emptyTableMsg");
-    const btnCopyTable = document.getElementById("btnCopyTable");
-    const btnDownloadCSV = document.getElementById("btnDownloadCSV");
-    const btnClearTable = document.getElementById("btnClearTable");
+    // Diagnostics Elements
+    const diagDeviceName = document.getElementById("diagDeviceName");
+    const diagConnType = document.getElementById("diagConnType");
+    const diagPacketCount = document.getElementById("diagPacketCount");
+    const diagLogBox = document.getElementById("diagLogBox");
 
     // --- State Variables ---
     let soundEnabled = true;
-    let modeGates = 2; // 1 or 2
+    let connectedDevice = null;
+    let serialPort = null;
+    let serialReader = null;
+    let packetCount = 0;
+    let passCount = 0;
+    const passesHistory = [];
 
-    // Gate tracking state
-    const gateState = {
-        1: {
-            blocked: false,
-            entryTimestamp: 0,
-            blockedTime: 0,
-            isHolding: false,
-            animating: false
-        },
-        2: {
-            blocked: false,
-            entryTimestamp: 0,
-            blockedTime: 0,
-            isHolding: false,
-            animating: false
-        }
+    // Hardware Beam Tracking
+    const beam1 = {
+        blocked: false,
+        blockTsUs: 0,
+        clearTsUs: 0,
+        blockPerfMs: 0,
+        clearPerfMs: 0,
+        durationSec: 0
     };
 
-    let transitStartTimestamp = 0;
-    let transitTime = 0;
-    let timerRunning = false;
-    let liveTimerRaf = null;
+    const beam2 = {
+        blocked: false,
+        blockTsUs: 0,
+        clearTsUs: 0,
+        blockPerfMs: 0,
+        clearPerfMs: 0,
+        durationSec: 0
+    };
 
-    let trialCount = 0;
-    const trialsHistory = [];
+    let lastTransitSec = 0;
+    let lastClockSource = "STANDBY";
 
     // --- Web Audio Synthesizer ---
     let audioCtx = null;
-
     function initAudio() {
         if (!audioCtx && typeof AudioContext !== "undefined") {
             try {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             } catch (e) {
-                console.warn("AudioContext not supported", e);
+                console.warn("AudioContext error", e);
             }
         }
     }
 
-    function playTone(freq, duration = 0.05, type = "sine") {
+    function playTone(freq, duration = 0.045, type = "sine") {
         if (!soundEnabled) return;
         try {
             initAudio();
@@ -122,578 +120,594 @@
             const gain = audioCtx.createGain();
             osc.type = type;
             osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-
             gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
-        } catch (err) {
-            // Audio error non-blocking
+        } catch (e) {
+            // Non-blocking
         }
     }
 
-    // --- Gate Block / Unblock Logic ---
-    function triggerGateBlock(gateId) {
+    // --- Diagnostics Logger ---
+    function logDiag(msg) {
+        const time = new Date().toLocaleTimeString([], { hour12: false, minute: "2-digit", second: "2-digit" });
+        diagLogBox.textContent = `[${time}] ${msg}\n` + diagLogBox.textContent.slice(0, 3000);
+    }
+
+    // --- Browser Compatibility Check ---
+    function checkBrowserSupport() {
+        const hasBle = typeof navigator !== "undefined" && !!navigator.bluetooth;
+        const hasHid = typeof navigator !== "undefined" && !!navigator.hid;
+        if (!hasBle && !hasHid) {
+            compatBanner.style.display = "flex";
+        }
+    }
+
+    // --- Vernier Packet Decoder ---
+    /**
+     * Decodes Vernier Go Direct "aperiodic" measurement packets (0x20).
+     * Extracts microsecond timestamps directly from the photogate hardware clock.
+     */
+    function parseVernierEventPacket(dv) {
+        if (dv.byteLength < 16 || dv.getUint8(0) !== 0x20) return null;
+        const subtype = dv.getUint8(4);
+        if (subtype !== 0x0a && subtype !== 0x0b) return null;
+        const channel = dv.getUint8(6);
+        const count = dv.getUint8(7);
+        const samples = [];
+        for (let i = 0; i < count && 8 + i * 8 + 8 <= dv.byteLength; i++) {
+            const at = 8 + i * 8;
+            const value = subtype === 0x0b ? dv.getInt32(at, true) : dv.getFloat32(at, true);
+            const tsUs = dv.getUint32(at + 4, true);
+            samples.push({ value, tsUs });
+        }
+        return samples.length ? { subtype, channel, samples } : null;
+    }
+
+    // --- Physical Beam Events ---
+    function onBeamEvent(beamNum, isBlocked, hwTsUs = null) {
         initAudio();
-        const g = gateState[gateId];
-        if (g.blocked) return;
-
-        g.blocked = true;
-        g.entryTimestamp = performance.now();
-        playTone(gateId === 1 ? 880 : 988, 0.06, "square");
-
-        // Visual updates
-        updateGateVisuals(gateId, true);
-
-        // Transit timing logic:
-        if (modeGates === 2) {
-            if (gateId === 1) {
-                transitStartTimestamp = g.entryTimestamp;
-                transitTime = 0;
-                gateState[2].blockedTime = 0;
-                timerStatusSummary.textContent = "TIMING TRANSIT...";
-                timerStatusSummary.classList.add("active");
-            } else if (gateId === 2 && transitStartTimestamp > 0) {
-                transitTime = (g.entryTimestamp - transitStartTimestamp) / 1000;
-            }
-        }
-
-        startLiveWatchLoop();
-    }
-
-    function triggerGateUnblock(gateId) {
-        const g = gateState[gateId];
-        if (!g.blocked) return;
-
-        const exitTimestamp = performance.now();
-        g.blockedTime = (exitTimestamp - g.entryTimestamp) / 1000;
-        g.blocked = false;
-        playTone(gateId === 1 ? 587 : 659, 0.05, "sine");
-
-        // Visual updates
-        updateGateVisuals(gateId, false);
-
-        // Update readouts
-        updateReadouts();
-
-        // If single gate mode, or if Gate 2 finished in 2-gate mode, pass is complete!
-        if (modeGates === 1 && gateId === 1) {
-            timerStatusSummary.textContent = "GATE 1 PASS COMPLETE";
-            timerStatusSummary.classList.remove("active");
-            logTrial();
-        } else if (modeGates === 2 && gateId === 2 && transitTime > 0) {
-            timerStatusSummary.textContent = "PASS COMPLETE";
-            timerStatusSummary.classList.remove("active");
-            logTrial();
-        }
-    }
-
-    function updateGateVisuals(gateId, isBlocked) {
-        const pill = gateId === 1 ? pillStateG1 : pillStateG2;
-        const beam = gateId === 1 ? beamG1 : beamG2;
-        const led = gateId === 1 ? ledG1 : ledG2;
-        const dot = gateId === 1 ? dotG1 : dotG2;
-        const card = gateId === 1 ? cardG1 : cardG2;
+        const nowPerf = performance.now();
+        const beam = beamNum === 1 ? beam1 : beam2;
+        const otherBeam = beamNum === 1 ? beam2 : beam1;
 
         if (isBlocked) {
-            pill.textContent = "BLOCKED";
-            pill.classList.add("blocked");
-            beam.classList.add("broken");
-            led.classList.add("blocked");
-            dot.classList.add("active");
-            card.classList.add("blocked-state");
+            beam.blocked = true;
+            beam.blockPerfMs = nowPerf;
+            if (hwTsUs !== null) beam.blockTsUs = hwTsUs;
+            playTone(beamNum === 1 ? 880 : 988, 0.05, "square");
+            setBeamVisual(beamNum, true);
+            logDiag(`Beam ${beamNum} BLOCKED (hwTs: ${hwTsUs !== null ? hwTsUs + ' µs' : 'browser clock'})`);
         } else {
-            pill.textContent = "UNBLOCKED";
-            pill.classList.remove("blocked");
-            beam.classList.remove("broken");
-            led.classList.remove("blocked");
-            dot.classList.remove("active");
-            card.classList.remove("blocked-state");
-        }
-    }
+            beam.blocked = false;
+            beam.clearPerfMs = nowPerf;
+            if (hwTsUs !== null) beam.clearTsUs = hwTsUs;
 
-    // --- Live LCD Watch Loop ---
-    function startLiveWatchLoop() {
-        if (timerRunning) return;
-        timerRunning = true;
-
-        function tick() {
-            const now = performance.now();
-            let keepRunning = false;
-
-            if (gateState[1].blocked) {
-                const liveG1 = (now - gateState[1].entryTimestamp) / 1000;
-                dispG1Time.innerHTML = `${liveG1.toFixed(4)} <span class="lcd-unit">s</span>`;
-                keepRunning = true;
+            // Calculate duration
+            if (hwTsUs !== null && beam.blockTsUs > 0) {
+                let diff = hwTsUs - beam.blockTsUs;
+                if (diff < 0) diff += 0x100000000; // 32-bit wrap
+                beam.durationSec = diff / 1000000;
+            } else if (beam.blockPerfMs > 0) {
+                beam.durationSec = (nowPerf - beam.blockPerfMs) / 1000;
             }
 
-            if (gateState[2].blocked) {
-                const liveG2 = (now - gateState[2].entryTimestamp) / 1000;
-                dispG2Time.innerHTML = `${liveG2.toFixed(4)} <span class="lcd-unit">s</span>`;
-                keepRunning = true;
-            }
+            playTone(beamNum === 1 ? 587 : 659, 0.04, "sine");
+            setBeamVisual(beamNum, false);
+            logDiag(`Beam ${beamNum} CLEARED (duration: ${beam.durationSec.toFixed(5)} s)`);
 
-            if (modeGates === 2 && transitStartTimestamp > 0 && !gateState[2].blockedTime) {
-                const liveTransit = (now - transitStartTimestamp) / 1000;
-                dispTransitTime.innerHTML = `${liveTransit.toFixed(4)} <span class="lcd-unit">s</span>`;
-                keepRunning = true;
-            }
-
-            if (keepRunning) {
-                liveTimerRaf = requestAnimationFrame(tick);
+            if (beamNum === 1) {
+                lblBeam1Duration.textContent = `${beam.durationSec.toFixed(4)} s`;
+                valBeam1Time.innerHTML = `${beam.durationSec.toFixed(4)} <span class="metric-unit-text">s</span>`;
             } else {
-                timerRunning = false;
-                liveTimerRaf = null;
+                lblBeam2Duration.textContent = `${beam.durationSec.toFixed(4)} s`;
+                valBeam2Time.innerHTML = `${beam.durationSec.toFixed(4)} <span class="metric-unit-text">s</span>`;
             }
-        }
 
-        liveTimerRaf = requestAnimationFrame(tick);
+            // Check if this unblock completes a pass between beams!
+            checkPassCompletion(beamNum);
+        }
     }
 
-    // --- Calculations & Readouts ---
-    function updateReadouts() {
-        const flagWidthCm = parseFloat(inputFlagWidth.value) || 5.0;
-        const flagWidthM = flagWidthCm / 100;
-        const gateDistCm = parseFloat(inputGateDist.value) || 50.0;
-        const gateDistM = gateDistCm / 100;
+    function checkPassCompletion(clearedBeamNum) {
+        // Did we have a transition from Beam 1 -> Beam 2 (or Beam 2 -> Beam 1)?
+        if (beam1.blockPerfMs > 0 && beam2.blockPerfMs > 0) {
+            let dtSec = 0;
+            let clockSource = "BROWSER CLOCK";
 
-        // Gate 1 Time & Speed
-        const t1 = gateState[1].blockedTime;
-        dispG1Time.innerHTML = `${t1.toFixed(4)} <span class="lcd-unit">s</span>`;
-        let v1 = 0;
-        if (t1 > 0) {
-            v1 = flagWidthM / t1;
-            dispG1Vel.textContent = `v1 = ${v1.toFixed(3)} m/s`;
-        } else {
-            dispG1Vel.textContent = `v1 = — m/s`;
-        }
-
-        // Gate 2 Time & Speed
-        const t2 = gateState[2].blockedTime;
-        dispG2Time.innerHTML = `${t2.toFixed(4)} <span class="lcd-unit">s</span>`;
-        let v2 = 0;
-        if (t2 > 0) {
-            v2 = flagWidthM / t2;
-            dispG2Vel.textContent = `v2 = ${v2.toFixed(3)} m/s`;
-        } else {
-            dispG2Vel.textContent = `v2 = — m/s`;
-        }
-
-        // Transit & Acceleration
-        dispTransitTime.innerHTML = `${transitTime.toFixed(4)} <span class="lcd-unit">s</span>`;
-        if (transitTime > 0) {
-            const vAvg = gateDistM / transitTime;
-            dispAvgSpeed.innerHTML = `v<sub>avg</sub> = ${vAvg.toFixed(3)} m/s`;
-
-            if (v1 > 0 && v2 > 0) {
-                const accel = (v2 - v1) / transitTime;
-                dispAccel.innerHTML = `${accel.toFixed(3)} <span class="lcd-unit">m/s²</span>`;
-
-                // Torricelli check: a = (v2^2 - v1^2) / (2 * dx)
-                const accelDx = (v2 * v2 - v1 * v1) / (2 * gateDistM);
-                dispAccelDx.textContent = `Torricelli: ${accelDx.toFixed(3)} m/s²`;
+            // If we have microsecond hardware timestamps:
+            if (beam1.blockTsUs > 0 && beam2.blockTsUs > 0) {
+                let diff = beam2.blockTsUs - beam1.blockTsUs;
+                // Handle forward or reverse pass
+                if (diff < -0x80000000) diff += 0x100000000;
+                dtSec = Math.abs(diff) / 1000000;
+                clockSource = "VERNIER HARDWARE CLOCK (1 µs)";
             } else {
-                dispAccel.innerHTML = `0.000 <span class="lcd-unit">m/s²</span>`;
-                dispAccelDx.textContent = `Torricelli: — m/s²`;
+                dtSec = Math.abs(beam2.blockPerfMs - beam1.blockPerfMs) / 1000;
+                clockSource = "BROWSER PERFORMANCE CLOCK (0.1 ms)";
             }
+
+            // Valid transit interval
+            if (dtSec > 0.0001 && dtSec < 10.0) {
+                lastTransitSec = dtSec;
+                lastClockSource = clockSource;
+                displayTransit(dtSec, clockSource);
+                logPassRow(dtSec, clockSource);
+
+                // Reset block markers for the next pass
+                beam1.blockPerfMs = 0;
+                beam2.blockPerfMs = 0;
+                beam1.blockTsUs = 0;
+                beam2.blockTsUs = 0;
+            }
+        }
+    }
+
+    function displayTransit(dtSec, clockSource) {
+        lblClockSource.textContent = clockSource;
+        heroTransitTime.innerHTML = `${dtSec.toFixed(6)} <span class="hero-unit">s</span>`;
+        const dtMs = dtSec * 1000;
+        heroTransitMs.textContent = `(= ${dtMs.toFixed(3)} ms)`;
+
+        // Calculate speed
+        const spacingCm = parseFloat(inputBeamSpacing.value) || 2.0;
+        const spacingM = spacingCm / 100;
+        const speed = spacingM / dtSec;
+        valSpeed.innerHTML = `${speed.toFixed(3)} <span class="metric-unit-text">m/s</span>`;
+
+        logDiag(`⭐ PASS COMPLETE: Δt = ${dtSec.toFixed(6)} s (${dtMs.toFixed(3)} ms), Speed = ${speed.toFixed(3)} m/s`);
+    }
+
+    function setBeamVisual(beamNum, isBlocked) {
+        const box = beamNum === 1 ? boxBeam1 : boxBeam2;
+        const badge = beamNum === 1 ? badgeBeam1 : badgeBeam2;
+        const line = beamNum === 1 ? lineBeam1 : lineBeam2;
+
+        if (isBlocked) {
+            box.classList.add("blocked");
+            badge.textContent = "BLOCKED";
+            badge.classList.remove("unblocked");
+            badge.classList.add("blocked");
+            line.classList.add("broken");
         } else {
-            dispAvgSpeed.innerHTML = `v<sub>avg</sub> = — m/s`;
-            dispAccel.innerHTML = `0.000 <span class="lcd-unit">m/s²</span>`;
-            dispAccelDx.textContent = `Torricelli: — m/s²`;
+            box.classList.remove("blocked");
+            badge.textContent = "UNBLOCKED";
+            badge.classList.remove("blocked");
+            badge.classList.add("unblocked");
+            line.classList.remove("broken");
         }
-    }
-
-    // --- Reset / Zero Timer ---
-    function zeroTimer() {
-        if (liveTimerRaf) {
-            cancelAnimationFrame(liveTimerRaf);
-            liveTimerRaf = null;
-        }
-        timerRunning = false;
-
-        gateState[1].blocked = false;
-        gateState[1].blockedTime = 0;
-        gateState[1].entryTimestamp = 0;
-        gateState[1].isHolding = false;
-        btnHoldG1.classList.remove("holding");
-        btnHoldG1.textContent = "Hold Beam Blocked";
-
-        gateState[2].blocked = false;
-        gateState[2].blockedTime = 0;
-        gateState[2].entryTimestamp = 0;
-        gateState[2].isHolding = false;
-        btnHoldG2.classList.remove("holding");
-        btnHoldG2.textContent = "Hold Beam Blocked";
-
-        transitStartTimestamp = 0;
-        transitTime = 0;
-
-        updateGateVisuals(1, false);
-        updateGateVisuals(2, false);
-
-        dispG1Time.innerHTML = `0.0000 <span class="lcd-unit">s</span>`;
-        dispG1Vel.textContent = `v1 = — m/s`;
-        dispG2Time.innerHTML = `0.0000 <span class="lcd-unit">s</span>`;
-        dispG2Vel.textContent = `v2 = — m/s`;
-        dispTransitTime.innerHTML = `0.0000 <span class="lcd-unit">s</span>`;
-        dispAvgSpeed.innerHTML = `v<sub>avg</sub> = — m/s`;
-        dispAccel.innerHTML = `0.000 <span class="lcd-unit">m/s²</span>`;
-        dispAccelDx.textContent = `Torricelli: — m/s²`;
-
-        cardG1.style.transform = `translateY(0px)`;
-        cardG2.style.transform = `translateY(0px)`;
-
-        timerStatusSummary.textContent = "READY / ZEROED";
-        timerStatusSummary.classList.remove("active");
-    }
-
-    // --- Animated Swipe Helper ---
-    function animatePass(gateId, speedMps = 1.2, onComplete = null) {
-        initAudio();
-        const flagWidthCm = parseFloat(inputFlagWidth.value) || 5.0;
-        const flagWidthM = flagWidthCm / 100;
-
-        // Block duration in seconds = width / speed
-        const durationSec = Math.max(0.015, flagWidthM / Math.max(0.1, speedMps));
-        const durationMs = durationSec * 1000;
-
-        const card = gateId === 1 ? cardG1 : cardG2;
-        card.style.transition = `transform ${durationMs + 200}ms cubic-bezier(0.2, 0.8, 0.2, 1)`;
-        card.style.transform = `translateY(120px)`;
-
-        // Trigger block at midpoint
-        setTimeout(() => {
-            triggerGateBlock(gateId);
-            setTimeout(() => {
-                triggerGateUnblock(gateId);
-                setTimeout(() => {
-                    card.style.transition = "transform 0.25s ease";
-                    card.style.transform = "translateY(0px)";
-                    if (onComplete) onComplete();
-                }, 150);
-            }, durationMs);
-        }, 80);
-    }
-
-    // --- Quick Pass (Gate 1 -> Gate 2) ---
-    function runSimulatedDualPass() {
-        if (gateState[1].blocked || gateState[2].blocked) return;
-        const speed = parseFloat(rangePassSpeed.value) || 1.2;
-        const gateDistCm = parseFloat(inputGateDist.value) || 50.0;
-        const gateDistM = gateDistCm / 100;
-        const transitSec = gateDistM / speed;
-        const transitMs = transitSec * 1000;
-
-        btnSimulatePass.disabled = true;
-        btnSimulatePass.textContent = "⏳ Running Pass...";
-
-        animatePass(1, speed, () => {
-            // After Gate 1, wait for transit delay minus overlap
-            const waitTime = Math.max(100, transitMs - 200);
-            setTimeout(() => {
-                animatePass(2, speed * 1.05, () => { // tiny acceleration for realism
-                    btnSimulatePass.disabled = false;
-                    btnSimulatePass.textContent = "⚡ Quick Pass (Gate 1 → Gate 2)";
-                });
-            }, waitTime);
-        });
-    }
-
-    // --- Interactive Mouse Drag on Cards ---
-    function setupCardDrag(cardEl, gateId) {
-        let isDragging = false;
-        let startY = 0;
-        let currentTranslateY = 0;
-        const beamCenterY = 90; // relative center where beam sits
-
-        function onPointerDown(e) {
-            initAudio();
-            isDragging = true;
-            startY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
-            currentTranslateY = 0;
-            cardEl.style.transition = "none";
-            window.addEventListener("pointermove", onPointerMove);
-            window.addEventListener("pointerup", onPointerUp);
-        }
-
-        function onPointerMove(e) {
-            if (!isDragging) return;
-            const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
-            const deltaY = clientY - startY;
-            currentTranslateY = Math.max(-20, Math.min(130, deltaY));
-            cardEl.style.transform = `translateY(${currentTranslateY}px)`;
-
-            // Card height is 52px; center of card touches beam between approx 45px and 110px
-            const cardTop = currentTranslateY;
-            const cardBottom = currentTranslateY + 52;
-            const beamY = 90;
-
-            const isInterruping = (cardTop <= beamY && cardBottom >= beamY);
-
-            if (isInterruping && !gateState[gateId].blocked) {
-                triggerGateBlock(gateId);
-            } else if (!isInterruping && gateState[gateId].blocked) {
-                triggerGateUnblock(gateId);
-            }
-        }
-
-        function onPointerUp() {
-            if (!isDragging) return;
-            isDragging = false;
-            window.removeEventListener("pointermove", onPointerMove);
-            window.removeEventListener("pointerup", onPointerUp);
-
-            if (gateState[gateId].blocked) {
-                triggerGateUnblock(gateId);
-            }
-
-            cardEl.style.transition = "transform 0.25s ease";
-            cardEl.style.transform = "translateY(0px)";
-        }
-
-        cardEl.addEventListener("pointerdown", onPointerDown);
     }
 
     // --- Data Table Logging ---
-    function logTrial() {
-        const t1 = gateState[1].blockedTime;
-        const t2 = modeGates === 2 ? gateState[2].blockedTime : 0;
-        const tTransit = modeGates === 2 ? transitTime : 0;
-
-        if (t1 <= 0 && t2 <= 0) return;
-
-        trialCount++;
-        const flagWidthM = (parseFloat(inputFlagWidth.value) || 5.0) / 100;
-        const gateDistM = (parseFloat(inputGateDist.value) || 50.0) / 100;
-
-        const v1 = t1 > 0 ? (flagWidthM / t1) : 0;
-        const v2 = t2 > 0 ? (flagWidthM / t2) : 0;
-        let accel = 0;
-        if (tTransit > 0 && v1 > 0 && v2 > 0) {
-            accel = (v2 - v1) / tTransit;
-        }
-
+    function logPassRow(dtSec, clockSource) {
+        passCount++;
         const now = new Date();
-        const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const timeStr = now.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const dtMs = dtSec * 1000;
+        const spacingCm = parseFloat(inputBeamSpacing.value) || 2.0;
+        const speed = (spacingCm / 100) / dtSec;
 
-        const rowData = {
-            trial: trialCount,
-            timeStr: timeStr,
-            t1: t1,
-            t2: t2,
-            tTransit: tTransit,
-            v1: v1,
-            v2: v2,
-            accel: accel
+        const row = {
+            pass: passCount,
+            time: timeStr,
+            transitSec: dtSec,
+            transitMs: dtMs,
+            b1Sec: beam1.durationSec,
+            b2Sec: beam2.durationSec,
+            speed: speed,
+            source: clockSource
         };
-        trialsHistory.push(rowData);
+        passesHistory.push(row);
 
-        emptyTableMsg.style.display = "none";
-
+        emptyNotice.style.display = "none";
         const tr = document.createElement("tr");
         tr.innerHTML = `
-            <th scope="row">${trialCount}</th>
+            <th scope="row">${passCount}</th>
             <td>${timeStr}</td>
-            <td>${t1 > 0 ? t1.toFixed(4) : "—"}</td>
-            <td>${modeGates === 2 && t2 > 0 ? t2.toFixed(4) : "—"}</td>
-            <td>${modeGates === 2 && tTransit > 0 ? tTransit.toFixed(4) : "—"}</td>
-            <td>${v1 > 0 ? v1.toFixed(3) : "—"}</td>
-            <td>${modeGates === 2 && v2 > 0 ? v2.toFixed(3) : "—"}</td>
-            <td>${modeGates === 2 && accel !== 0 ? accel.toFixed(3) : "—"}</td>
+            <td><strong>${dtSec.toFixed(6)} s</strong></td>
+            <td>${dtMs.toFixed(3)} ms</td>
+            <td>${beam1.durationSec > 0 ? beam1.durationSec.toFixed(4) + ' s' : '—'}</td>
+            <td>${beam2.durationSec > 0 ? beam2.durationSec.toFixed(4) + ' s' : '—'}</td>
+            <td><strong>${speed.toFixed(3)} m/s</strong></td>
+            <td>${clockSource.includes("VERNIER") ? "Vernier GDX-VPG" : "Serial / Clock"}</td>
         `;
-        timesTableBody.prepend(tr);
+        tableBody.prepend(tr);
     }
 
-    // --- Export CSV & Copy Data ---
-    function downloadCSV() {
-        if (trialsHistory.length === 0) {
-            alert("No recorded trials to export yet.");
+    // --- Connect Vernier Go Direct Photogate ---
+    async function connectVernier(isBle = true) {
+        initAudio();
+        if (typeof window.godirect === "undefined") {
+            alert("Vernier Go Direct library is loading. Please try again in a moment.");
             return;
         }
 
-        let csv = "Trial,Timestamp,Gate 1 Time (s),Gate 2 Time (s),Transit Time (s),Speed 1 (m/s),Speed 2 (m/s),Acceleration (m/s^2)\n";
-        trialsHistory.forEach(r => {
-            csv += `${r.trial},"${r.timeStr}",${r.t1.toFixed(4)},${r.t2.toFixed(4)},${r.tTransit.toFixed(4)},${r.v1.toFixed(3)},${r.v2.toFixed(3)},${r.accel.toFixed(3)}\n`;
+        try {
+            logDiag(`Opening device chooser for Vernier Go Direct (${isBle ? "Bluetooth" : "USB WebHID"})...`);
+            connStatusText.textContent = "Connecting to Vernier device...";
+
+            // Use official godirect selector
+            const device = await window.godirect.selectDevice(isBle);
+            if (!device) {
+                connStatusText.textContent = "Connection cancelled.";
+                return;
+            }
+
+            connectedDevice = device;
+            const devName = device.name || "Vernier Go Direct Photogate";
+            diagDeviceName.textContent = devName;
+            diagConnType.textContent = isBle ? "Bluetooth (BLE)" : "USB (WebHID)";
+            connStatusPill.classList.remove("disconnected");
+            connStatusPill.classList.add("connected");
+            connStatusText.textContent = `CONNECTED: ${devName}`;
+            btnDisconnect.style.display = "inline-flex";
+            btnConnectBle.style.display = "none";
+            btnConnectUsb.style.display = "none";
+            btnConnectSerial.style.display = "none";
+
+            logDiag(`Connected to ${devName}. Inspecting sensor channels...`);
+            device.sensors.forEach(s => {
+                logDiag(`  Channel ${s.number}: "${s.name}" (${s.unit || 'state'})`);
+            });
+
+            // Tap into raw packets to capture 1 µs hardware timestamps
+            tapVernierPackets(device);
+
+            // Enable Beam 1 (Channel 4: "Gate 1 - Gate State")
+            // and Beam 2 (Channel 5: "Gate 2 - Gate State")
+            // and Velocity (Channel 1: "Object Velocity")
+            let gate1Sensor = device.sensors.find(s => /gate\s*1/i.test(s.name) && /state/i.test(s.name)) || device.getSensor(4);
+            let gate2Sensor = device.sensors.find(s => /gate\s*2/i.test(s.name) && /state/i.test(s.name)) || device.getSensor(5);
+            let velSensor = device.sensors.find(s => /velocity/i.test(s.name)) || device.getSensor(1);
+
+            if (gate1Sensor) {
+                gate1Sensor.setEnabled(true);
+                gate1Sensor.on("value-changed", (s) => {
+                    if (s.value === null) return;
+                    onBeamEvent(1, s.value === 1);
+                });
+                logDiag(`Enabled Gate 1 sensor (channel ${gate1Sensor.number})`);
+            }
+
+            if (gate2Sensor) {
+                gate2Sensor.setEnabled(true);
+                gate2Sensor.on("value-changed", (s) => {
+                    if (s.value === null) return;
+                    onBeamEvent(2, s.value === 1);
+                });
+                logDiag(`Enabled Gate 2 sensor (channel ${gate2Sensor.number})`);
+            }
+
+            if (velSensor) {
+                velSensor.setEnabled(true);
+                velSensor.on("value-changed", (s) => {
+                    if (s.value === null) return;
+                    logDiag(`Firmware Object Velocity: ${s.value.toFixed(4)} m/s`);
+                });
+            }
+
+            // Start measurements
+            if (typeof device.start === "function") {
+                await device.start(0);
+            }
+
+            device.on("device-closed", () => {
+                logDiag("Vernier device disconnected.");
+                disconnect();
+            });
+
+            logDiag("Listening for optical beam interrupts from photogate hardware!");
+        } catch (err) {
+            console.error("Vernier connection error:", err);
+            connStatusPill.classList.remove("connected");
+            connStatusPill.classList.add("disconnected");
+            connStatusText.textContent = `Connection failed: ${err.message || err}`;
+            logDiag(`Error: ${err.message || err}`);
+        }
+    }
+
+    /**
+     * Intercepts raw DataView packets from godirect to extract 1 µs hardware timestamps.
+     */
+    function tapVernierPackets(device) {
+        const originalHandle = device._handleResponse?.bind(device);
+        if (!originalHandle) return;
+
+        device._handleResponse = (dataView) => {
+            packetCount++;
+            diagPacketCount.textContent = packetCount.toString();
+            try {
+                const packet = parseVernierEventPacket(dataView);
+                if (packet) {
+                    packet.samples.forEach(sample => {
+                        // Channel 4 = Gate 1, Channel 5 = Gate 2
+                        if (packet.channel === 4) {
+                            onBeamEvent(1, sample.value === 1, sample.tsUs);
+                        } else if (packet.channel === 5) {
+                            onBeamEvent(2, sample.value === 1, sample.tsUs);
+                        }
+                    });
+                }
+            } catch (e) {
+                // Keep resilient
+            }
+            originalHandle(dataView);
+        };
+    }
+
+    // --- Connect USB Serial (Arduino / micro:bit) ---
+    async function connectSerial() {
+        if (!("serial" in navigator)) {
+            alert("Web Serial API is not supported in this browser. Please use Google Chrome or Microsoft Edge.");
+            return;
+        }
+
+        try {
+            logDiag("Requesting Serial COM port...");
+            serialPort = await navigator.serial.requestPort();
+            await serialPort.open({ baudRate: 115200 });
+
+            diagDeviceName.textContent = "USB Serial Photogate";
+            diagConnType.textContent = "USB Serial (115200 baud)";
+            connStatusPill.classList.remove("disconnected");
+            connStatusPill.classList.add("connected");
+            connStatusText.textContent = "CONNECTED: USB Serial Photogate";
+            btnDisconnect.style.display = "inline-flex";
+            btnConnectBle.style.display = "none";
+            btnConnectUsb.style.display = "none";
+            btnConnectSerial.style.display = "none";
+
+            readSerialStream();
+            logDiag("Serial connection active. Reading serial line stream...");
+        } catch (err) {
+            logDiag(`Serial error: ${err.message || err}`);
+            connStatusText.textContent = `Serial Error: ${err.message || err}`;
+        }
+    }
+
+    async function readSerialStream() {
+        const textDecoder = new TextDecoderStream();
+        const readableStreamClosed = serialPort.readable.pipeTo(textDecoder.writable);
+        serialReader = textDecoder.readable.getReader();
+        let buffer = "";
+
+        try {
+            while (true) {
+                const { value, done } = await serialReader.read();
+                if (done) break;
+                buffer += value;
+                const lines = buffer.split("\n");
+                buffer = lines.pop(); // keep last incomplete line
+
+                for (const line of lines) {
+                    const clean = line.trim().toUpperCase();
+                    if (!clean) continue;
+                    logDiag(`Serial in: "${clean}"`);
+
+                    if (clean.includes("1") || clean.includes("G1") || clean.includes("BEAM1")) {
+                        onBeamEvent(1, clean.includes("BLOCK") || clean === "1");
+                    } else if (clean.includes("2") || clean.includes("G2") || clean.includes("BEAM2")) {
+                        onBeamEvent(2, clean.includes("BLOCK") || clean === "2");
+                    }
+                }
+            }
+        } catch (e) {
+            logDiag(`Serial stream ended: ${e.message}`);
+        }
+    }
+
+    // --- Disconnect Device ---
+    function disconnect() {
+        if (connectedDevice) {
+            try {
+                connectedDevice.close();
+            } catch (e) {}
+            connectedDevice = null;
+        }
+
+        if (serialReader) {
+            try {
+                serialReader.cancel();
+            } catch (e) {}
+            serialReader = null;
+        }
+
+        if (serialPort) {
+            try {
+                serialPort.close();
+            } catch (e) {}
+            serialPort = null;
+        }
+
+        connStatusPill.classList.remove("connected");
+        connStatusPill.classList.add("disconnected");
+        connStatusText.textContent = "DISCONNECTED • Click 'Connect' to pair";
+        diagDeviceName.textContent = "None";
+        diagConnType.textContent = "Disconnected";
+        btnDisconnect.style.display = "none";
+        btnConnectBle.style.display = "inline-flex";
+        btnConnectUsb.style.display = "inline-flex";
+        btnConnectSerial.style.display = "inline-flex";
+        logDiag("Hardware disconnected.");
+    }
+
+    // --- Zero / Reset Timer ---
+    function zeroReadout() {
+        beam1.blocked = false;
+        beam2.blocked = false;
+        beam1.blockPerfMs = 0;
+        beam2.blockPerfMs = 0;
+        beam1.blockTsUs = 0;
+        beam2.blockTsUs = 0;
+        beam1.durationSec = 0;
+        beam2.durationSec = 0;
+        lastTransitSec = 0;
+
+        setBeamVisual(1, false);
+        setBeamVisual(2, false);
+
+        lblBeam1Duration.textContent = "0.0000 s";
+        lblBeam2Duration.textContent = "0.0000 s";
+        valBeam1Time.innerHTML = `0.0000 <span class="metric-unit-text">s</span>`;
+        valBeam2Time.innerHTML = `0.0000 <span class="metric-unit-text">s</span>`;
+        heroTransitTime.innerHTML = `0.000000 <span class="hero-unit">s</span>`;
+        heroTransitMs.textContent = `(= 0.00 ms)`;
+        valSpeed.innerHTML = `— <span class="metric-unit-text">m/s</span>`;
+
+        logDiag("Timer readout zeroed / reset.");
+    }
+
+    // --- Manual Test Pass Helper ---
+    function runTestPass(speedMps = 1.0) {
+        initAudio();
+        const spacingCm = parseFloat(inputBeamSpacing.value) || 2.0;
+        const spacingM = spacingCm / 100;
+        const transitSec = spacingM / speedMps;
+        const transitMs = transitSec * 1000;
+        const flagWidthM = 0.01; // 1 cm flag
+        const blockDurationMs = (flagWidthM / speedMps) * 1000;
+
+        logDiag(`Running simulated test pass: ${speedMps} m/s across ${spacingCm} cm...`);
+
+        // Beam 1 break
+        onBeamEvent(1, true);
+        setTimeout(() => {
+            onBeamEvent(1, false);
+        }, blockDurationMs);
+
+        // Beam 2 break after transit interval
+        setTimeout(() => {
+            onBeamEvent(2, true);
+            setTimeout(() => {
+                onBeamEvent(2, false);
+            }, blockDurationMs);
+        }, transitMs);
+    }
+
+    // --- Data Export & Clipboard ---
+    function copyTable() {
+        if (passesHistory.length === 0) {
+            alert("No recorded passes to copy yet.");
+            return;
+        }
+
+        let tsv = "Pass\tTimestamp\tTime Between Beams (s)\tMilliseconds (ms)\tBeam 1 Time (s)\tBeam 2 Time (s)\tSpeed (m/s)\tSource\n";
+        passesHistory.forEach(r => {
+            tsv += `${r.pass}\t${r.time}\t${r.transitSec.toFixed(6)}\t${r.transitMs.toFixed(3)}\t${r.b1Sec.toFixed(4)}\t${r.b2Sec.toFixed(4)}\t${r.speed.toFixed(3)}\t${r.source}\n`;
+        });
+
+        navigator.clipboard.writeText(tsv).then(() => {
+            const orig = btnCopyData.textContent;
+            btnCopyData.textContent = "✓ Copied!";
+            setTimeout(() => btnCopyData.textContent = orig, 1800);
+        }).catch(() => {
+            alert("Could not copy table to clipboard.");
+        });
+    }
+
+    function exportCSV() {
+        if (passesHistory.length === 0) {
+            alert("No recorded passes to export yet.");
+            return;
+        }
+
+        let csv = "Pass,Timestamp,Time Between Beams (s),Milliseconds (ms),Beam 1 Time (s),Beam 2 Time (s),Speed (m/s),Source\n";
+        passesHistory.forEach(r => {
+            csv += `${r.pass},"${r.time}",${r.transitSec.toFixed(6)},${r.transitMs.toFixed(3)},${r.b1Sec.toFixed(4)},${r.b2Sec.toFixed(4)},${r.speed.toFixed(3)},"${r.source}"\n`;
         });
 
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `photogate_data_${Date.now()}.csv`;
+        a.download = `photogate_transit_times_${Date.now()}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
 
-    function copyTable() {
-        if (trialsHistory.length === 0) {
-            alert("No recorded trials to copy yet.");
-            return;
-        }
-
-        let text = "Trial\tTimestamp\tGate 1 (s)\tGate 2 (s)\tTransit (s)\tSpeed 1 (m/s)\tSpeed 2 (m/s)\tAcceleration (m/s²)\n";
-        trialsHistory.forEach(r => {
-            text += `${r.trial}\t${r.timeStr}\t${r.t1.toFixed(4)}\t${r.t2.toFixed(4)}\t${r.tTransit.toFixed(4)}\t${r.v1.toFixed(3)}\t${r.v2.toFixed(3)}\t${r.accel.toFixed(3)}\n`;
-        });
-
-        navigator.clipboard.writeText(text).then(() => {
-            const originalText = btnCopyTable.textContent;
-            btnCopyTable.textContent = "✓ Copied!";
-            setTimeout(() => {
-                btnCopyTable.textContent = originalText;
-            }, 1800);
-        }).catch(err => {
-            alert("Could not copy data to clipboard.");
-        });
-    }
-
-    function clearTable() {
-        if (trialsHistory.length === 0) return;
-        if (confirm("Clear all recorded trials?")) {
-            trialsHistory.length = 0;
-            timesTableBody.innerHTML = "";
-            emptyTableMsg.style.display = "block";
-            trialCount = 0;
+    function clearData() {
+        if (passesHistory.length === 0) return;
+        if (confirm("Clear all recorded photogate times?")) {
+            passesHistory.length = 0;
+            tableBody.innerHTML = "";
+            emptyNotice.style.display = "block";
+            passCount = 0;
+            zeroReadout();
+            logDiag("Data log cleared.");
         }
     }
 
-    // --- Mode Switching (1 Gate vs 2 Gates) ---
-    function setGateMode(numGates) {
-        modeGates = numGates;
-        if (numGates === 1) {
-            btnMode1Gate.classList.add("active");
-            btnMode2Gates.classList.remove("active");
-            gateUnit2.style.display = "none";
-            gateTransitSpacer.style.display = "none";
-            cellG2Time.style.display = "none";
-            cellTransitTime.style.display = "none";
-            cellAccel.style.display = "none";
-            boxGateDistance.style.display = "none";
-        } else {
-            btnMode2Gates.classList.add("active");
-            btnMode1Gate.classList.remove("active");
-            gateUnit2.style.display = "flex";
-            gateTransitSpacer.style.display = "flex";
-            cellG2Time.style.display = "flex";
-            cellTransitTime.style.display = "flex";
-            cellAccel.style.display = "flex";
-            boxGateDistance.style.display = "flex";
+    // --- Recalculate Speed on Spacing Input Change ---
+    function onSpacingChange() {
+        if (lastTransitSec > 0) {
+            const spacingCm = parseFloat(inputBeamSpacing.value) || 2.0;
+            const speed = (spacingCm / 100) / lastTransitSec;
+            valSpeed.innerHTML = `${speed.toFixed(3)} <span class="metric-unit-text">m/s</span>`;
         }
-        zeroTimer();
     }
 
     // --- Event Listeners ---
-    function initEvents() {
-        // Mode buttons
-        btnMode2Gates.addEventListener("click", () => setGateMode(2));
-        btnMode1Gate.addEventListener("click", () => setGateMode(1));
+    function initListeners() {
+        btnConnectBle.addEventListener("click", () => connectVernier(true));
+        btnConnectUsb.addEventListener("click", () => connectVernier(false));
+        btnConnectSerial.addEventListener("click", connectSerial);
+        btnDisconnect.addEventListener("click", disconnect);
 
-        // Sound Toggle
         btnAudioToggle.addEventListener("click", () => {
             soundEnabled = !soundEnabled;
             btnAudioToggle.setAttribute("aria-pressed", soundEnabled.toString());
             audioIcon.textContent = soundEnabled ? "🔊" : "🔇";
-            audioLabel.textContent = soundEnabled ? "Sound: ON" : "Sound: OFF";
+            audioLabel.textContent = soundEnabled ? "Audio Beeps: ON" : "Audio Beeps: OFF";
         });
 
-        // Quick Pass Actions
-        btnPassG1.addEventListener("click", () => animatePass(1, parseFloat(rangePassSpeed.value) || 1.2));
-        btnPassG2.addEventListener("click", () => animatePass(2, parseFloat(rangePassSpeed.value) || 1.2));
-        btnSimulatePass.addEventListener("click", runSimulatedDualPass);
+        btnZeroReadout.addEventListener("click", zeroReadout);
+        inputBeamSpacing.addEventListener("input", onSpacingChange);
 
-        // Speed slider
-        rangePassSpeed.addEventListener("input", (e) => {
-            valPassSpeed.textContent = `${parseFloat(e.target.value).toFixed(1)} m/s`;
+        // Manual Test buttons
+        btnTestBeam1.addEventListener("click", () => {
+            onBeamEvent(1, true);
+            setTimeout(() => onBeamEvent(1, false), 50);
         });
-
-        // Hold Buttons
-        btnHoldG1.addEventListener("click", () => {
-            initAudio();
-            const g = gateState[1];
-            if (!g.isHolding) {
-                g.isHolding = true;
-                btnHoldG1.classList.add("holding");
-                btnHoldG1.textContent = "Release Beam";
-                cardG1.style.transform = "translateY(90px)";
-                triggerGateBlock(1);
-            } else {
-                g.isHolding = false;
-                btnHoldG1.classList.remove("holding");
-                btnHoldG1.textContent = "Hold Beam Blocked";
-                cardG1.style.transform = "translateY(0px)";
-                triggerGateUnblock(1);
-            }
+        btnTestBeam2.addEventListener("click", () => {
+            onBeamEvent(2, true);
+            setTimeout(() => onBeamEvent(2, false), 50);
         });
+        btnTestPass.addEventListener("click", () => runTestPass(1.0));
 
-        btnHoldG2.addEventListener("click", () => {
-            initAudio();
-            const g = gateState[2];
-            if (!g.isHolding) {
-                g.isHolding = true;
-                btnHoldG2.classList.add("holding");
-                btnHoldG2.textContent = "Release Beam";
-                cardG2.style.transform = "translateY(90px)";
-                triggerGateBlock(2);
-            } else {
-                g.isHolding = false;
-                btnHoldG2.classList.remove("holding");
-                btnHoldG2.textContent = "Hold Beam Blocked";
-                cardG2.style.transform = "translateY(0px)";
-                triggerGateUnblock(2);
-            }
-        });
+        // Data actions
+        btnCopyData.addEventListener("click", copyTable);
+        btnExportCSV.addEventListener("click", exportCSV);
+        btnClearData.addEventListener("click", clearData);
 
-        // Zero / Reset Timer
-        btnZeroTimer.addEventListener("click", zeroTimer);
-
-        // Record Current readings
-        btnRecordRow.addEventListener("click", logTrial);
-
-        // Table actions
-        btnDownloadCSV.addEventListener("click", downloadCSV);
-        btnCopyTable.addEventListener("click", copyTable);
-        btnClearTable.addEventListener("click", clearTable);
-
-        // Parameter changes re-compute readouts
-        inputFlagWidth.addEventListener("input", updateReadouts);
-        inputGateDist.addEventListener("input", updateReadouts);
-
-        // Card drags
-        setupCardDrag(cardG1, 1);
-        setupCardDrag(cardG2, 2);
-
-        // Keyboard Shortcuts: [1], [2], [Space], [Z]
+        // Keyboard triggers for rapid testing: [1], [2], [Space], [Z]
         window.addEventListener("keydown", (e) => {
-            // Ignore if typing in input
             if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-
             if (e.key === "1") {
                 e.preventDefault();
-                animatePass(1, parseFloat(rangePassSpeed.value) || 1.2);
-            } else if (e.key === "2" && modeGates === 2) {
+                onBeamEvent(1, true);
+                setTimeout(() => onBeamEvent(1, false), 50);
+            } else if (e.key === "2") {
                 e.preventDefault();
-                animatePass(2, parseFloat(rangePassSpeed.value) || 1.2);
+                onBeamEvent(2, true);
+                setTimeout(() => onBeamEvent(2, false), 50);
             } else if (e.code === "Space") {
                 e.preventDefault();
-                if (modeGates === 2) {
-                    runSimulatedDualPass();
-                } else {
-                    animatePass(1, parseFloat(rangePassSpeed.value) || 1.2);
-                }
-            } else if (e.key.toLowerCase() === "z" || e.key.toLowerCase() === "r") {
+                runTestPass(1.2);
+            } else if (e.key.toLowerCase() === "z") {
                 e.preventDefault();
-                zeroTimer();
+                zeroReadout();
             }
         });
     }
 
-    // --- Initialization ---
-    initEvents();
-    zeroTimer();
+    // --- Init ---
+    checkBrowserSupport();
+    initListeners();
+    zeroReadout();
+    logDiag("Hardware Photogate Reader initialized. Ready to connect photogate.");
 })();

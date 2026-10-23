@@ -1,22 +1,31 @@
-# Standalone Photogate Timer
+# Hardware Photogate Reader
 
-A fast, lightweight, and responsive virtual digital photogate timer built for high school and AP Physics classrooms. Authored as part of **The Thinking Experiment** (PhysicsKit).
+A web application to connect physical photogates directly to your computer and read the real-time interval between optical beams and gate pulse durations. Authored as part of **The Thinking Experiment** (PhysicsKit).
 
 ---
 
 ## 🎯 Purpose
 
-A standalone utility for whenever you need to record times from photogates quickly without needing to set up complex track dynamics, drop towers, or pendulums.
+Connect your real laboratory photogates (such as the **Vernier Go Direct Photogate GDX-VPG**, USB WebHID sensors, or Arduino/micro:bit USB Serial photogates) and read:
+- **Time Between Beams ($\Delta t_{1\to 2}$)**: Measured down to microsecond ($1\text{ }\mu\text{s}$) hardware precision directly from the photogate's internal clock.
+- **Beam 1 & Beam 2 Block Durations ($\Delta t_1, \Delta t_2$)**.
+- **Calculated Speed ($v = \Delta x / \Delta t$)**: Automatically calculated based on beam spacing (default $2.00\text{ cm}$ for Vernier Go Direct dual beams).
+- **Automatic Data Logging**: Logs every physical pass with timestamps, durations, and speeds. Exportable as CSV or one-click clipboard copy.
 
-- **Dual-Gate & Single-Gate Modes**: Switch between 2 photogates (measuring $\Delta t_1$, $\Delta t_2$, and transit time $\Delta t_{1\to 2}$) or 1 photogate (measuring gate block time $\Delta t$).
-- **Instant Speed & Acceleration Calculations**: Enter flag width (cm) and gate separation (cm) to calculate $v_1 = \Delta x / \Delta t_1$, $v_2 = \Delta x / \Delta t_2$, and $a = \Delta v / \Delta t$.
-- **Multiple Ways to Trigger**:
-  1. Click **"Quick Pass (Gate 1 → Gate 2)"** with adjustable simulated speed.
-  2. Click **"Swipe Through Gate 1 / 2"** or **"Hold Beam Blocked"**.
-  3. **Drag the flag** with your mouse or finger through the laser beam.
-  4. Use keyboard shortcuts: `[1]` for Gate 1, `[2]` for Gate 2, `[Space]` for a dual pass, and `[Z]` to zero the timer.
-- **Data Table Logging**: Automatically records each trial with timestamps. Export to CSV or copy directly to clipboard for Google Sheets or Excel.
-- **Audio Feedback**: Built-in sound effects synthesize crisp clicks when beams are interrupted and cleared.
+---
+
+## 🔌 Hardware Connectivity
+
+1. **Bluetooth (Web Bluetooth)**:
+   - Click **"Connect Vernier Photogate (Bluetooth)"** in Google Chrome or Microsoft Edge.
+   - Select your Vernier Go Direct Photogate (`GDX-VPG`).
+   - The app connects to the dual optical beam channels and velocity channels.
+2. **USB (WebHID)**:
+   - Connect the Go Direct Photogate via USB cable and click **"Connect USB (WebHID)"**.
+3. **USB Serial (Arduino / micro:bit / DIY)**:
+   - Click **"USB Serial (Arduino / DIY)"** to pair with any serial COM port transmitting state transitions or timestamps.
+4. **Manual Test Buttons**:
+   - Includes quick desktop test buttons (`Trigger Beam 1`, `Trigger Beam 2`, `Test Pass`) and keyboard shortcuts (`[1]`, `[2]`, `[Space]`, `[Z]`) to verify readouts.
 
 ---
 
@@ -24,11 +33,11 @@ A standalone utility for whenever you need to record times from photogates quick
 
 - **Palette**: Teal (`#0f7e9b`), Amber CTA (`#d67b19`), White background (`#ffffff`).
 - **Light Mode Only**: `color-scheme: light` enforced.
-- **No external dependencies**: Pure vanilla HTML5, CSS3, and modern ES6 JavaScript.
+- **Zero dependencies**: Standalone UMD bundle included.
 
 ---
 
-## 🚀 Live Demo
+## 🚀 Live Web App
 
-Launch the simulation on GitHub Pages:
+Launch directly in Google Chrome or Microsoft Edge:
 [https://thinking-experiment-sims.github.io/photogate-timer-sim/](https://thinking-experiment-sims.github.io/photogate-timer-sim/)

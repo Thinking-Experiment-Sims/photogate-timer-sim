@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photogate Timer - The Thinking Experiment</title>
-    <meta name="description" content="Fast, standalone photogate timer to record beam interruption and transit times for physics classrooms.">
+    <title>Hardware Photogate Reader - The Thinking Experiment</title>
+    <meta name="description" content="Connect physical photogates via Bluetooth or USB and read the precise time between beams and gate block durations.">
     <meta name="color-scheme" content="light">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,244 +14,245 @@
 </head>
 <body>
     <div class="shell">
-        <!-- HEADER -->
+        <!-- ===== HERO HEADER ===== -->
         <header class="hero" role="banner">
             <div class="hero-brand">
-                <p class="kicker">The Thinking Experiment &bull; Quick Lab Tools</p>
-                <h1>Standalone Photogate Timer</h1>
-                <p class="subtitle">Quick digital timer for photogates. Record gate block times (&Delta;t&#8321;, &Delta;t&#8322;), transit time (&Delta;t&#8321;&#8322;), and calculate speed and acceleration on the fly.</p>
+                <p class="kicker">The Thinking Experiment &bull; Physical Lab Interface</p>
+                <h1>Hardware Photogate Reader</h1>
+                <p class="subtitle">Connect your physical photogate to the computer via Bluetooth or USB to read the exact time between beams, gate pulse durations, and instantaneous speed with microsecond hardware accuracy.</p>
             </div>
             <div class="hero-right">
-                <button type="button" class="sound-btn" id="btnAudioToggle" aria-pressed="true" title="Toggle audio beeps">
+                <button type="button" class="sound-btn" id="btnAudioToggle" aria-pressed="true" title="Toggle audio feedback">
                     <span id="audioIcon">🔊</span>
-                    <span id="audioLabel">Sound: ON</span>
+                    <span id="audioLabel">Audio Beeps: ON</span>
                 </button>
             </div>
         </header>
 
-        <!-- MAIN LAYOUT -->
-        <main class="timer-layout">
-            
-            <!-- TOP CARD: INTERACTIVE PHOTOGATE BENCH -->
-            <section class="card bench-card" aria-label="Interactive Photogates">
-                <div class="card-header">
-                    <div class="card-title-group">
-                        <span class="card-badge">Virtual Bench</span>
-                        <h2 class="card-title">Interactive Photogates</h2>
+        <!-- ===== HARDWARE CONNECTION BAR ===== -->
+        <section class="card connect-card" aria-label="Sensor Connection Controls">
+            <div class="connect-strip">
+                <div class="connect-actions">
+                    <button type="button" class="btn btn-amber btn-lg" id="btnConnectBle" title="Connect a Vernier Go Direct Photogate via Web Bluetooth">
+                        <svg viewBox="0 0 24 24" class="btn-icon" aria-hidden="true"><path d="M7 7l10 10-5 5V2l5 5L7 17"></path></svg>
+                        <span>Connect Vernier Photogate (Bluetooth)</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="btnConnectUsb" title="Connect a Vernier Go Direct Photogate via USB WebHID">
+                        <svg viewBox="0 0 24 24" class="btn-icon" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                        <span>Connect USB (WebHID)</span>
+                    </button>
+                    <button type="button" class="btn btn-ghost" id="btnConnectSerial" title="Connect an Arduino / Serial COM Port Photogate">
+                        <span>USB Serial (Arduino / DIY)</span>
+                    </button>
+                    <button type="button" class="btn btn-danger-subtle" id="btnDisconnect" style="display:none;" title="Disconnect currently paired photogate">
+                        <span>Disconnect</span>
+                    </button>
+                </div>
+
+                <div class="connection-status-pill disconnected" id="connStatusPill">
+                    <span class="status-indicator-dot" id="connDot"></span>
+                    <span class="status-text" id="connStatusText">DISCONNECTED &bull; Click "Connect" to pair</span>
+                </div>
+            </div>
+
+            <!-- BROWSER COMPATIBILITY NOTICE -->
+            <div class="compat-banner" id="compatBanner" style="display:none;">
+                <span class="compat-icon">⚠️</span>
+                <span>Web Bluetooth &amp; WebHID require Google Chrome or Microsoft Edge on macOS, Windows, ChromeOS, or Android. (Safari does not support Web Bluetooth).</span>
+            </div>
+        </section>
+
+        <!-- ===== LIVE BEAM STATUS BAR ===== -->
+        <section class="card beam-monitor-card" aria-label="Physical Beam State Monitors">
+            <div class="card-header">
+                <div class="card-title-group">
+                    <span class="card-badge">Live Hardware State</span>
+                    <h2 class="card-title">Real-Time Optical Beam Detectors</h2>
+                </div>
+                <div class="test-actions">
+                    <span class="test-label">Manual Test:</span>
+                    <button type="button" class="btn-mini" id="btnTestBeam1">Trigger Beam 1</button>
+                    <button type="button" class="btn-mini" id="btnTestBeam2">Trigger Beam 2</button>
+                    <button type="button" class="btn-mini btn-mini-amber" id="btnTestPass">Test Pass (Both)</button>
+                </div>
+            </div>
+
+            <div class="beam-monitors-grid">
+                <!-- BEAM 1 -->
+                <div class="beam-detector-box" id="boxBeam1">
+                    <div class="beam-box-header">
+                        <span class="beam-tag">BEAM 1 (GATE 1)</span>
+                        <span class="beam-state-badge unblocked" id="badgeBeam1">UNBLOCKED</span>
                     </div>
-                    <div class="gate-mode-selector" role="group" aria-label="Number of Photogates">
-                        <button type="button" class="gate-mode-btn active" id="btnMode2Gates">2 Photogates (Dual Gate)</button>
-                        <button type="button" class="gate-mode-btn" id="btnMode1Gate">1 Photogate (Single Gate)</button>
+                    <div class="beam-visual">
+                        <span class="emitter-dot"></span>
+                        <div class="laser-track">
+                            <div class="laser-line active" id="lineBeam1"></div>
+                        </div>
+                        <span class="detector-dot"></span>
+                    </div>
+                    <div class="beam-sub-stats">
+                        <span>Last Block Duration: <strong id="lblBeam1Duration">0.0000 s</strong></span>
                     </div>
                 </div>
 
-                <!-- VISUAL GATES STAGE -->
-                <div class="gates-stage" id="gatesStage">
-                    <div class="gate-unit" id="gateUnit1">
-                        <div class="gate-badge">
-                            <span class="gate-tag">GATE 1</span>
-                            <span class="gate-state-pill" id="pillStateG1">UNBLOCKED</span>
-                        </div>
-                        <div class="gate-u-frame">
-                            <div class="gate-arm left-arm">
-                                <span class="diode emitter" title="Infrared Emitter"></span>
-                            </div>
-                            <div class="beam-channel">
-                                <div class="laser-beam unbroken" id="beamG1"></div>
-                                <div class="beam-interrupter-card" id="cardG1" draggable="false" title="Drag me down through the beam!">
-                                    <div class="card-handle"></div>
-                                    <span class="card-lbl">FLAG</span>
-                                </div>
-                            </div>
-                            <div class="gate-arm right-arm">
-                                <span class="diode detector" title="Photodetector"></span>
-                            </div>
-                            <div class="gate-led-indicator" id="ledG1" title="Indicator LED"></div>
-                        </div>
-                        <div class="gate-quick-actions">
-                            <button type="button" class="gate-action-btn" id="btnPassG1">Swipe Through Gate 1</button>
-                            <button type="button" class="gate-hold-btn" id="btnHoldG1">Hold Beam Blocked</button>
-                        </div>
-                        <span class="key-hint">Press <strong>[ 1 ]</strong> or drag flag</span>
+                <!-- BEAM 2 -->
+                <div class="beam-detector-box" id="boxBeam2">
+                    <div class="beam-box-header">
+                        <span class="beam-tag">BEAM 2 (GATE 2)</span>
+                        <span class="beam-state-badge unblocked" id="badgeBeam2">UNBLOCKED</span>
                     </div>
-
-                    <div class="gate-transit-spacer" id="gateTransitSpacer">
-                        <div class="transit-line">
-                            <span class="transit-arrow">&rarr;</span>
-                            <span class="transit-label">Transit Path (&Delta;x)</span>
+                    <div class="beam-visual">
+                        <span class="emitter-dot"></span>
+                        <div class="laser-track">
+                            <div class="laser-line active" id="lineBeam2"></div>
                         </div>
-                        <button type="button" class="btn btn-amber btn-simulate-pass" id="btnSimulatePass">
-                            ⚡ Quick Pass (Gate 1 &rarr; Gate 2)
-                        </button>
-                        <div class="pass-speed-ctrl">
-                            <label for="rangePassSpeed" class="speed-ctrl-lbl">Simulated Speed: <strong id="valPassSpeed">1.2 m/s</strong></label>
-                            <input type="range" id="rangePassSpeed" min="0.2" max="4.0" step="0.1" value="1.2" class="slider-sm">
-                        </div>
+                        <span class="detector-dot"></span>
                     </div>
+                    <div class="beam-sub-stats">
+                        <span>Last Block Duration: <strong id="lblBeam2Duration">0.0000 s</strong></span>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-                    <div class="gate-unit" id="gateUnit2">
-                        <div class="gate-badge">
-                            <span class="gate-tag">GATE 2</span>
-                            <span class="gate-state-pill" id="pillStateG2">UNBLOCKED</span>
-                        </div>
-                        <div class="gate-u-frame">
-                            <div class="gate-arm left-arm">
-                                <span class="diode emitter" title="Infrared Emitter"></span>
-                            </div>
-                            <div class="beam-channel">
-                                <div class="laser-beam unbroken" id="beamG2"></div>
-                                <div class="beam-interrupter-card" id="cardG2" draggable="false" title="Drag me down through the beam!">
-                                    <div class="card-handle"></div>
-                                    <span class="card-lbl">FLAG</span>
-                                </div>
-                            </div>
-                            <div class="gate-arm right-arm">
-                                <span class="diode detector" title="Photodetector"></span>
-                            </div>
-                            <div class="gate-led-indicator" id="ledG2" title="Indicator LED"></div>
-                        </div>
-                        <div class="gate-quick-actions">
-                            <button type="button" class="gate-action-btn" id="btnPassG2">Swipe Through Gate 2</button>
-                            <button type="button" class="gate-hold-btn" id="btnHoldG2">Hold Beam Blocked</button>
-                        </div>
-                        <span class="key-hint">Press <strong>[ 2 ]</strong> or drag flag</span>
+        <!-- ===== PRIMARY DIGITAL READOUT (THE STAR OF THE SHOW) ===== -->
+        <section class="card readout-card" aria-label="Precision Measurements">
+            <div class="card-header readout-header">
+                <div class="card-title-group">
+                    <span class="console-logo">PRECISION READOUT</span>
+                    <h2 class="card-title">Time Between Beams &amp; Kinematics</h2>
+                </div>
+                <div class="readout-actions">
+                    <button type="button" class="btn btn-amber" id="btnZeroReadout">
+                        Zero / Reset Timer
+                    </button>
+                </div>
+            </div>
+
+            <div class="readout-body">
+                <!-- PRIMARY HERO DISPLAY: TIME BETWEEN BEAMS -->
+                <div class="hero-timer-display">
+                    <div class="hero-timer-title">
+                        <span class="hero-timer-label">TIME BETWEEN BEAMS (&Delta;t<span class="sub">1&rarr;2</span>)</span>
+                        <span class="clock-source-tag" id="lblClockSource">HARDWARE CLOCK &bull; 1 &mu;s ACCURACY</span>
+                    </div>
+                    <div class="hero-timer-digits" id="heroTransitTime">
+                        0.000000 <span class="hero-unit">s</span>
+                    </div>
+                    <div class="hero-timer-ms" id="heroTransitMs">
+                        (= 0.00 ms)
                     </div>
                 </div>
 
-                <!-- QUICK PARAMETERS STRIP -->
-                <div class="params-strip">
-                    <div class="param-box">
-                        <label for="inputFlagWidth" class="param-lbl">Flag Width (&Delta;x<span class="sub">flag</span>):</label>
-                        <div class="input-with-unit">
-                            <input type="number" id="inputFlagWidth" value="5.0" min="0.1" max="50.0" step="0.5" class="num-input">
-                            <span class="unit-tag">cm</span>
+                <!-- SECONDARY READOUT METRICS -->
+                <div class="metrics-grid">
+                    <!-- BEAM SPACING -->
+                    <div class="metric-card">
+                        <label for="inputBeamSpacing" class="metric-label">Beam Spacing (&Delta;x):</label>
+                        <div class="metric-input-wrap">
+                            <input type="number" id="inputBeamSpacing" value="2.00" min="0.1" max="500.0" step="0.01" class="metric-num-input">
+                            <span class="metric-unit">cm</span>
                         </div>
-                        <span class="param-hint">Used to calculate v = &Delta;x / &Delta;t</span>
+                        <span class="metric-hint">Go Direct internal spacing = 2.00 cm</span>
                     </div>
 
-                    <div class="param-box" id="boxGateDistance">
-                        <label for="inputGateDist" class="param-lbl">Gate Distance (&Delta;x<span class="sub">1&rarr;2</span>):</label>
-                        <div class="input-with-unit">
-                            <input type="number" id="inputGateDist" value="50.0" min="1.0" max="500.0" step="1.0" class="num-input">
-                            <span class="unit-tag">cm</span>
+                    <!-- CALCULATED SPEED -->
+                    <div class="metric-card accent-card">
+                        <span class="metric-label">MEASURED SPEED (v):</span>
+                        <div class="metric-value" id="valSpeed">
+                            &mdash; <span class="metric-unit-text">m/s</span>
                         </div>
-                        <span class="param-hint">Used to calculate a = &Delta;v / &Delta;t</span>
+                        <span class="metric-hint">v = &Delta;x / &Delta;t<span class="sub">1&rarr;2</span></span>
                     </div>
 
-                    <div class="param-box actions-param-box">
-                        <button type="button" class="btn btn-amber btn-lg" id="btnZeroTimer">
-                            Zero / Reset Timer
-                        </button>
-                        <button type="button" class="btn btn-secondary" id="btnRecordRow">
-                            + Log Current Readings
-                        </button>
+                    <!-- BEAM 1 DURATION -->
+                    <div class="metric-card">
+                        <span class="metric-label">BEAM 1 DURATION (&Delta;t&#8321;):</span>
+                        <div class="metric-value" id="valBeam1Time">
+                            0.0000 <span class="metric-unit-text">s</span>
+                        </div>
+                        <span class="metric-hint" id="valBeam1Speed">v&#8321; = &mdash;</span>
+                    </div>
+
+                    <!-- BEAM 2 DURATION -->
+                    <div class="metric-card">
+                        <span class="metric-label">BEAM 2 DURATION (&Delta;t&#8322;):</span>
+                        <div class="metric-value" id="valBeam2Time">
+                            0.0000 <span class="metric-unit-text">s</span>
+                        </div>
+                        <span class="metric-hint" id="valBeam2Speed">v&#8322; = &mdash;</span>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
 
-
-            <!-- MIDDLE CARD: DIGITAL DISPLAY CONSOLE -->
-            <section class="card console-card" aria-label="Digital Timer Display">
-                <div class="card-header console-header">
-                    <div class="card-title-group">
-                        <span class="console-logo">DIGITAL PHOTOGATE TIMER</span>
-                        <h2 class="card-title">Live Hardware Readout</h2>
-                    </div>
-                    <div class="status-summary" id="timerStatusSummary">READY</div>
+        <!-- ===== RECORDED DATA LOG TABLE ===== -->
+        <section class="card table-card" aria-label="Recorded Times Log">
+            <div class="card-header">
+                <div class="card-title-group">
+                    <span class="card-badge">Data Log</span>
+                    <h2 class="card-title">Recorded Times Table</h2>
                 </div>
-
-                <div class="digital-readout-grid">
-                    <!-- GATE 1 BLOCK TIME -->
-                    <div class="lcd-cell">
-                        <div class="lcd-header">
-                            <span class="lcd-name">GATE 1 TIME (&Delta;t&#8321;)</span>
-                            <span class="lcd-status-dot" id="dotG1"></span>
-                        </div>
-                        <div class="lcd-digits" id="dispG1Time">0.0000 <span class="lcd-unit">s</span></div>
-                        <div class="lcd-sub" id="dispG1Vel">v&#8321; = &mdash; m/s</div>
-                    </div>
-
-                    <!-- GATE 2 BLOCK TIME -->
-                    <div class="lcd-cell" id="cellG2Time">
-                        <div class="lcd-header">
-                            <span class="lcd-name">GATE 2 TIME (&Delta;t&#8322;)</span>
-                            <span class="lcd-status-dot" id="dotG2"></span>
-                        </div>
-                        <div class="lcd-digits" id="dispG2Time">0.0000 <span class="lcd-unit">s</span></div>
-                        <div class="lcd-sub" id="dispG2Vel">v&#8322; = &mdash; m/s</div>
-                    </div>
-
-                    <!-- TRANSIT TIME -->
-                    <div class="lcd-cell" id="cellTransitTime">
-                        <div class="lcd-header">
-                            <span class="lcd-name">TRANSIT TIME (&Delta;t&#8321;&#8322;)</span>
-                            <span class="lcd-badge-tag">G1 &rarr; G2</span>
-                        </div>
-                        <div class="lcd-digits" id="dispTransitTime">0.0000 <span class="lcd-unit">s</span></div>
-                        <div class="lcd-sub" id="dispAvgSpeed">v<span class="sub">avg</span> = &mdash; m/s</div>
-                    </div>
-
-                    <!-- ACCELERATION -->
-                    <div class="lcd-cell accent-cell" id="cellAccel">
-                        <div class="lcd-header">
-                            <span class="lcd-name">ACCELERATION (a)</span>
-                            <span class="lcd-badge-tag">a = &Delta;v / &Delta;t</span>
-                        </div>
-                        <div class="lcd-digits" id="dispAccel">0.000 <span class="lcd-unit">m/s&sup2;</span></div>
-                        <div class="lcd-sub" id="dispAccelDx">Torricelli: &mdash; m/s&sup2;</div>
-                    </div>
+                <div class="table-actions">
+                    <button type="button" class="btn-subtle" id="btnCopyData" title="Copy table to clipboard">📋 Copy Data</button>
+                    <button type="button" class="btn-subtle" id="btnExportCSV" title="Export as CSV spreadsheet">📥 Export CSV</button>
+                    <button type="button" class="btn-subtle btn-danger" id="btnClearData" title="Clear recorded rows">🗑️ Clear</button>
                 </div>
-            </section>
+            </div>
 
-
-            <!-- BOTTOM CARD: DATA TABLE & LOG -->
-            <section class="card data-card" aria-label="Recorded Times Table">
-                <div class="card-header">
-                    <div class="card-title-group">
-                        <span class="card-badge">Data Table</span>
-                        <h2 class="card-title">Recorded Times Log</h2>
-                    </div>
-                    <div class="table-actions">
-                        <button type="button" class="btn-subtle" id="btnCopyTable" title="Copy table to clipboard">📋 Copy Data</button>
-                        <button type="button" class="btn-subtle" id="btnDownloadCSV" title="Download CSV spreadsheet">📥 Download CSV</button>
-                        <button type="button" class="btn-subtle btn-danger" id="btnClearTable" title="Clear all rows">🗑️ Clear</button>
-                    </div>
+            <div class="table-scroll">
+                <table class="data-table" id="dataTable" aria-label="Photogate Recorded Times Log">
+                    <caption>Chronological recording of physical photogate beam transit times and speeds.</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Pass #</th>
+                            <th scope="col">Timestamp</th>
+                            <th scope="col">Time Between Beams (&Delta;t<span class="sub">1&rarr;2</span>)</th>
+                            <th scope="col">Milliseconds</th>
+                            <th scope="col">Beam 1 Time (&Delta;t&#8321;)</th>
+                            <th scope="col">Beam 2 Time (&Delta;t&#8322;)</th>
+                            <th scope="col">Measured Speed (v)</th>
+                            <th scope="col">Source / Device</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Populated as passes occur -->
+                    </tbody>
+                </table>
+                <div class="table-empty-notice" id="emptyNotice">
+                    <span>No passes recorded yet. Connect a photogate and break Beam 1 then Beam 2 to record times automatically.</span>
                 </div>
+            </div>
+        </section>
 
-                <div class="table-wrapper">
-                    <table class="data-table" id="timesTable" aria-label="Photogate Recorded Times">
-                        <caption>Table of recorded photogate block times, transit times, and computed velocities.</caption>
-                        <thead>
-                            <tr>
-                                <th scope="col">Trial #</th>
-                                <th scope="col">Timestamp</th>
-                                <th scope="col">Gate 1 (&Delta;t&#8321;)</th>
-                                <th scope="col">Gate 2 (&Delta;t&#8322;)</th>
-                                <th scope="col">Transit (&Delta;t&#8321;&#8322;)</th>
-                                <th scope="col">Speed 1 (v&#8321;)</th>
-                                <th scope="col">Speed 2 (v&#8322;)</th>
-                                <th scope="col">Acceleration (a)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="timesTableBody">
-                            <!-- Populated on each pass or by clicking Record -->
-                        </tbody>
-                    </table>
-                    <div class="table-empty-msg" id="emptyTableMsg">
-                        <span>No photogate passes recorded yet. Trigger Gate 1 / Gate 2 above to log times.</span>
+        <!-- ===== HARDWARE DIAGNOSTICS & HELP ===== -->
+        <section class="card diag-card" aria-label="Hardware Diagnostics">
+            <details class="diag-disclosure">
+                <summary class="diag-summary">
+                    <span class="diag-title">🔍 Hardware Diagnostics &amp; Raw Packets</span>
+                    <span class="diag-toggle-icon">&darr;</span>
+                </summary>
+                <div class="diag-body">
+                    <div class="diag-status-row">
+                        <span><strong>Device Name:</strong> <span id="diagDeviceName">None</span></span>
+                        <span><strong>Connection:</strong> <span id="diagConnType">Disconnected</span></span>
+                        <span><strong>Packets Received:</strong> <span id="diagPacketCount">0</span></span>
                     </div>
+                    <pre class="diag-log-box" id="diagLogBox" aria-live="polite">Waiting for device connection...</pre>
                 </div>
-            </section>
+            </details>
+        </section>
 
-        </main>
-
-        <!-- FOOTER -->
+        <!-- ===== FOOTER ===== -->
         <footer class="app-footer">
-            <p><strong>The Thinking Experiment</strong> &bull; Standalone Photogate Timer</p>
-            <p>Clean Light Mode &bull; High School &amp; AP Physics Classrooms &bull; Sub-millisecond Precision</p>
+            <p><strong>The Thinking Experiment</strong> &bull; Hardware Photogate Reader</p>
+            <p>Connects via Web Bluetooth / WebHID / Web Serial &bull; Sub-millisecond Hardware Clock &bull; Light Mode Enforced</p>
         </footer>
     </div>
 
+    <!-- Vernier Go Direct Official Standalone UMD Library -->
+    <script src="godirect.min.umd.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
